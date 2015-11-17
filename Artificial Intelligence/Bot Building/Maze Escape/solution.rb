@@ -106,15 +106,30 @@ class Solver
     end
 
     def take_step
-        begin
-            direction = case Random.rand(4)
-                        when 0 then :up
-                        when 1 then :down
-                        when 2 then :left
-                        when 3 then :right
-                        end
-        end while at(*position(direction)) == Wall
-        direction
+        # First see if we can get to the exit in one step
+        direction = find_exit
+        return direction if direction
+
+        # Otherwise try to keep going
+        direction = :up
+        return direction unless at(*position(direction)) == Wall
+        
+        # Try to turn right
+        direction = :right
+        return direction unless at(*position(direction)) == Wall
+        
+        # Left?
+        direction = :left
+        return direction unless at(*position(direction)) == Wall
+        
+        :down
+    end
+                      
+    def find_exit        
+        [:up, :down, :left, :right].each do |direction|
+            return direction if at(*position(direction)) == Exit
+        end
+        nil
     end
 
     def position(direction)
