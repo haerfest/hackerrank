@@ -2,24 +2,21 @@
 
 class Solver
 
-    Unexplored = " "
-    Wall = "#"
-    Empty = "-"
+    Unexplored = "."
+    Wall       = "#"
+    Empty      = "-"
     Breadcrumb = "o"
-    Exit = "e"
-
-    Output = { up: 'UP', down: 'DOWN', right: 'RIGHT', left: 'LEFT' }
+    Exit       = "e"
 
     def initialize(state_file)
         if File.exist?(state_file)
             deserialize(state_file)
         else
-            max_size = 30
-            @size = 2 * max_size + 1
-            @maze = Array.new(@size) { Array.new(@size, Unexplored) }
-            @row = max_size
-            @column = max_size
-            @direction = :up  # don't know, but doesn't matter
+            max_size    = 30
+            @size       = 2 * max_size + 1
+            @maze       = Array.new(@size) { Array.new(@size, Unexplored) }
+            @row        = max_size
+            @column     = max_size
             @state_file = state_file
         end
         Random.srand
@@ -27,9 +24,6 @@ class Solver
 
     def serialize
         File.open(@state_file, "w") do |io|
-            io.puts @row
-            io.puts @column
-            io.puts @direction
             io.puts @size
             @maze.each { |row| io.puts row.join }
         end
@@ -38,46 +32,52 @@ class Solver
     def deserialize(state_file)
         @state_file = state_file
         File.open(@state_file) do |io|
-            @row = io.gets.chomp.to_i
-            @column = io.gets.chomp.to_i
-            @direction = io.gets.chomp.to_sym
             @size = io.gets.chomp.to_i
             @maze = Array.new(@size) { io.gets.chomp.chars }
         end
+        @row    = @size / 2
+        @column = @size / 2
     end
 
     def look_at!(view)
-        remember!(rotate(view))
+        remember!(view)
         debug
     end
 
     def step!
-        @direction = take_step
-        puts Output[@direction]
-        @row, @column = position(@direction)
+        direction = take_step
+        correct!(direction)
+        direction
     end
 
     private
 
-    def rotate(view)
-        case @direction
-        when :up then view
-        when :down then rotate_180(view)
-        when :right then rotate_90(view)
-        when :left then rotate_270(view)
+    def correct!(direction)
+        degrees = case direction
+                  when :up    then   0
+                  when :down  then 180
+                  when :right then 270
+                  when :left  then  90
+                  end
+        rotate!(degrees)
+        shift!
+    end
+
+    def rotate!(degrees)
+        case degrees
+        when 0
+            # nothing to do
+        when 90
+            @maze = @maze.transpose.map(&:reverse)
+        when 180
+            @maze = @maze.map(&:reverse).reverse
+        when 270
+            @maze = @maze.map(&:reverse).transpose
         end
     end
 
-    def rotate_180(view)
-        view.map(&:reverse).reverse
-    end
-
-    def rotate_90(view)
-        view.transpose.map(&:reverse)
-    end
-
-    def rotate_270(view)
-        view.map(&:reverse).transpose
+    def shift!
+        @maze = @maze.unshift((Unexplored * @size).chars)[0 .. -2]
     end
 
     def remember!(view)
@@ -100,6 +100,7 @@ class Solver
         elsif known == Breadcrumb and object == Empty
             # keep breadcrumb
         elsif known != object
+            debug
             raise "maze construction: cannot place #{object} over #{known} at (#{row},#{column})"
         end
     end
@@ -118,9 +119,9 @@ class Solver
 
     def position(direction)
         case direction
-        when :up then [@row - 1, @column]
-        when :down then [@row + 1, @column]
-        when :left then [@row, @column - 1]
+        when :up    then [@row - 1, @column]
+        when :down  then [@row + 1, @column]
+        when :left  then [@row, @column - 1]
         when :right then [@row, @column + 1]
         end
     end
@@ -130,23 +131,30 @@ class Solver
     end
 
     def debug
-        direction = { up: '^', down: 'v', right: '>', left: '<' }
+        STDERR.puts Time.now
         @maze.each_index do |index|
             row = @maze[index]
             if index == @row
-                STDERR.print row.join[0..@column-1]
-                STDERR.print direction[@direction]
-                STDERR.puts row.join[@column+1..-1]
-            elsif row.any? { |object| object != Unexplored }
+                STDERR.print row.join[0 .. @column - 1]
+                STDERR.print "b"
+                STDERR.puts row.join[@column + 1 .. -1]
+            else
                 STDERR.puts row.join
             end
         end
+        STDERR.flush
     end
 end
 
+# ------------------------------------------------------------------------------
+#  M a i n   P r o g r a m
+# ------------------------------------------------------------------------------
+
+Direction = { up: 'UP', down: 'DOWN', right: 'RIGHT', left: 'LEFT' }
+
 solver = Solver.new("state.txt")
-gets
+gets  # ignore player ID
 view = 3.times.collect { gets.chomp.chars }
 solver.look_at!(view)
-solver.step!
+puts Direction[solver.step!]
 solver.serialize
