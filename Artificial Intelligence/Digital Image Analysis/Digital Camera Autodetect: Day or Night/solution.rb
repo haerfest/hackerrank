@@ -8,7 +8,7 @@ class Histogram
         while line = io.gets
             pixels = line.chomp.split
             pixels.each do |pixel|
-                blue, green, red = pixel.split(',').map { |s| s.to_i }
+                blue, green, red = pixel.split(',').map(&:to_i)
                 luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue).round
                 @luminances[luminance] += 1
             end
