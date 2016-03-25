@@ -184,6 +184,9 @@ end
 # solution is printed as a list of queen columns, ordered by row, and as a
 # visual board layout.
 n = (ARGV.shift || gets).to_i
-solution = Solver.new.solve(n, true)
-puts
-puts solution ? solution : "No solution for n=#{n}"
+solution = Solver.new.solve(n)
+if solution
+  puts solution
+else
+  puts "No solution for n=#{n}"
+end
