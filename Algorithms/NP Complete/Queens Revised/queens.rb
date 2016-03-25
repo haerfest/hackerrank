@@ -7,278 +7,183 @@
 #   3. no 2 queens can see each other diagonally (45 or 135 deg)
 #   4. no 3 queens should see each other diagonally (any deg)
 #
-# Strategy:
-#
-#   1. Starting at row 1, place a queen at the first available column and mark
-#      all possitions that are not allowed anymore:
-#
-#   Q x x x x
-#   x x . . .
-#   x . x . .
-#   x . . x .
-#   x . . . x
-#
-#   2. Moving on to the second row, place a queen at the first available column
-#      and mark again:
-#
-#   Q x x x x
-#   x x Q x x
-#   x x x x x  <= no placement possible
-#   x . x x x
-#   x . . . x
-#
-#   3. Moving on to the third row, we see there is no available position,
-#      meaning the placements of the queens in the previous two rows resulted
-#      in a dead-end.  Backtrack and try the next possible column for row two
-#      and mark again:
-#
-#   Q x x x x
-#   x x x Q x
-#   x . x x x
-#   x x . x .
-#   x . . . x
-#
-#   4. Moving to the third row again, we now have one column to try and we mark
-#      again:
-#
-#   Q x x x x
-#   x x x Q x
-#   x Q x x x
-#   x x x x .
-#   x x x x x  <= no placement possible
-#
-#   5. We see that now the fifth row is totally blocked, meaning this is a
-#      dead-end too.  Backtracking to row 3 yields no further possibilities,
-#      so we backtrack to row 2 and try the next available position:
-#
-#   Q x x x x
-#   x x x x Q
-#   x . x x x
-#   x . x x x
-#   x x . . x
-#
-#   6.  Moving to row 3, where we only have once choice:
-#
-#   Q x x x x
-#   x x x x Q
-#   x Q x x x
-#   x x x x x  <= no placement
-#   x x x x x  <= possible
-#
-#   7.  Again no solution!  We now have to backtrack all the way to the first
-#       row and rince and repeat.  Turns out there is no solution for N=5.
-#
 # To generate RDoc documentationm from this file:
 #
 # $ rdoc queens.rb
 
 
-# This class represents a game board and contains methods for placing queens and
-# marking squares as either blocked by a queen's line of sight or not.
+# This class represents a position in the board.
+class Position
+  # The position's row.
+  attr_accessor :row
 
-class Board
-  # The number of rows on the board.
-  attr_reader :rows
+  # The position's column.
+  attr_accessor :col
 
-  # The number of columns on the board.
-  attr_reader :cols
-
-  # Each square that has the possibility to place a queen at, has the value 0.
-  Possible = 0
-
-  # Initializes the game board by setting all squares to +Possible+.
-  # +rows+:: the number of rows of the board
-  # +cols+:: the number of columns of the board
-  def initialize(rows, cols)
-    @rows = rows
-    @cols = cols
-    @squares = Array.new(@rows) { Array.new(@cols, Possible) }
-  end
-
-  # Places a queen on the board.  It marks all the squares that are now blocked
-  # by the queen.
-  # +row+:: the row to place the queen at
-  # +col+:: the column to place the queen at
-  def place!(row, col)
-    @squares[row][col] = :queen
-    column!(row, col, method(:impossible!))
-    row!(row, col, method(:impossible!))
-    diagonals!(row, col, method(:impossible!))
-  end
-
-  # Removes a queen from a square of the board.  It unmarks all the squares that
-  # were blocked by the queen.
-  # +row+:: the square's row
-  # +col+:: the square's column
-  def remove!(row, col)
-    column!(row, col, method(:possible!))
-    row!(row, col, method(:possible!))
-    diagonals!(row, col, method(:possible!))
-    @squares[row][col] = Possible
-  end
-
-  # Marks a square as blocked by a queen's line of sight.  As the value of
-  # +Possible+ (zero) represents an unblocked square, any other value would do,
-  # but since we want to allow to roll back a single queen's line of sight, we
-  # have to keep track of the number of lines of sight the square is blocked by.
-  # +row+:: the square's row
-  # +col+:: the square's column
-  def impossible!(row, col)
-    @squares[row][col] += 1
-  end
-
-  # Marks a square as being blocked by one less line of sight of a queen.
-  # +row+:: the square's row
-  # +col+:: the square's column
-  def possible!(row, col)
-    @squares[row][col] -= 1
-  end
-
-  # Returns whether it is possible to place a queen on a square on the board.
-  # +row+:: the square's row
-  # +col+:: the square's column
-  def possible?(row, col)
-    @squares[row][col] == Possible
-  end
-
-  # Marks an entire column on the board as blocked or not.
-  # +row+:: the queen's row
-  # +col+:: the queen's column
-  # +m+:: either the method #possible! or #impossible!
-  def column!(row, col, m)
-    @rows.times { |r| m.call(r, col) unless r == row }
-  end
-
-  # Marks an entire row on the board as blocked or not.
-  # +row+:: the queen's row
-  # +col+:: the queen's column
-  # +m+:: either the method #possible! or #impossible!
-  def row!(row, col, m)
-    @cols.times { |c| m.call(row, c) unless c == col }
-  end
-
-  # Marks the entire 45 and 135-degree diagonals on the board as blocked or not.
-  # +row+:: the row of the queen
-  # +col+:: the column of the queen
-  # +m+:: either the method #possible! or #impossible!
-  def diagonals!(row, col, m)
-    (diagonals(row, col, +1, +1) - [[row, col]]).each { |r,c| m.call(r, c) }
-    (diagonals(row, col, -1, +1) - [[row, col]]).each { |r,c| m.call(r, c) }
-    extra_diagonals(row, col, m)
-  end
-
-  # Marks a diagonal passing through two queens on the board as blocked or
-  # not.  It searches previous rows for queens and for each queen, given the
-  # current queen's position, marks off the diagonal represented by those two
-  # queens.  This prevents a future third queen from being placed in line with
-  # these two.
-  # +row+:: the row of the queen
-  # +col+:: the column of the queen
-  # +m+:: either the method #possible! or #impossible!
-  def extra_diagonals(row, col, m)
-    row.times do |r|
-      c = @squares[r].find_index(:queen)
-      dr = row - r
-      dc = col - c
-      diagonals(row, col, dr, dc).each do |rr,cc|
-        m.call(rr, cc) unless @squares[rr][cc] == :queen
-      end
-    end
-  end
-
-  # Returns the diagonal crossing the square at +row+ and +col+ by coefficients
-  # +dr+ and +dc+ (delta row and -column).
-  # +row+:: the row of the square the diagonal passes through
-  # +col+:: the column of the square the diagonal passes through
-  # +dr+:: the delta row
-  # +dc+:: the delta column
-  def diagonals(row, col, dr, dc)
-    n = [@rows, @cols].max - 1
-    (-n..n).reduce([]) do |memo, i|
-      r = row + i * dr
-      c = col + i * dc
-      memo << [r, c] if inside?(r, c)
-      memo
-    end.uniq
-  end
-
-  # Returns whether a square falls inside the board or not.
-  # +row+:: the square's row
-  # +column+:: the square's column
-  def inside?(row, col)
-    row >= 0 and row < @rows and col >= 0 and col < @cols
-  end
-
-  # Returns a string representation of the board, where a 'Q' represents a
-  # queen and a '.' an empty square.
-  def to_s
-    @squares.reduce('') do |memo, row|
-      memo + row.reduce('') do |memo, square|
-        memo + case square
-               when :queen then 'Q'
-               when Possible then '.'
-               else '*'
-               end
-      end + "\n"
-    end
-  end
-
-  # Returns each queen's position as an array of columns, ordered by row.
-  def to_a
-    @squares.map { |row| row.find_index(:queen) }
+  # Creates a new position with a given row and column.
+  # +row+:: the row
+  # +col+:: the column
+  def initialize(row, col)
+    @row = row
+    @col = col
   end
 end
 
 
-# This class solves the Queens Revisited problem for any game board.
+# This class represents a queen.
+class Queen
+  # The queen's position on the board.
+  attr_accessor :pos
 
-class Solver
-
-  # Creates an empty game board of a particular size.
-  # +rows+:: the number of rows on the board
-  # +cols+:: the number of columns on the board
-  # +debug+:: when true will print out each step
-  def initialize(rows, cols, debug = false)
-    @board = Board.new(rows, cols)
-    @debug = debug
+  # Creates a new queen at a position.
+  # +pos+:: the position
+  def initialize(pos)
+    @pos = pos
   end
 
-  # Solves the Queens Revisited problem recursively by placing queens on
-  # successive positions on the board, always one per row, and marking off which
-  # squares are blocked by the lines of sight of the placed queens.  If it can
-  # successfully place a queen in each row, it has found a solution.
-  # +row+:: the row at which to begin placing queens
-  # +block+:: a +Proc+ which is invoked with a solved board
-  def solve(row, &block)
-    if @debug
-      puts "row #{row}:"
-      puts @board
-      puts
-    end
+  # Moves the queen to a new position.
+  # +pos+:: the new position
+  def move(pos)
+    @pos = pos
+  end
 
-    if row == @board.rows
-      yield @board
-      return
-    end
+  # Returns whether this queen attacks another queen in any way.
+  # +queen+:: the other queen
+  def attacks?(queen)
+    return true if attacks_vertically?(queen)
+    return true if attacks_horizontally?(queen)
+    return true if attacks_diagonally?(queen)
+    false
+  end
 
-    @board.cols.times do |col|
-      if @board.possible?(row, col)
-        @board.place!(row, col)
-        solve(row + 1, &block)
-        @board.remove!(row, col)
+  # Returns whether this queen attacks another queen vertically.
+  # +queen+:: the other queen
+  def attacks_vertically?(queen)
+    @pos.col == queen.pos.col
+  end
+
+  # Returns whether this queen attacks another queen horizontally.
+  # +queen+:: the other queen
+  def attacks_horizontally?(queen)
+    @pos.row == queen.pos.row
+  end
+
+  # Returns whether this queen attacks another queen diagonally.
+  # +queen+:: the other queen
+  def attacks_diagonally?(queen)
+    (@pos.row - queen.pos.row).abs == (@pos.col - queen.pos.col).abs
+  end
+end
+
+
+# This class represents an N x N game board.
+class Board
+  # The queens on the board, orderd by row.
+  attr_reader :queens
+
+  # Creates a new game board with the queens randomly distributed.
+  # +n+:: the number of queens, rows and columns on the board
+  def initialize(n)
+    @queens = Array.new(n) { |row| Queen.new(Position.new(row, Random.rand(n))) }
+  end
+
+  # Returns the number of queens under attack.
+  def attack_count
+    @queens.select { |q| attacked?(q) }.uniq.count
+  end
+
+  # Returns whether a queen is under attack from any other queen.
+  # +queen+:: the queen
+  def attacked?(queen)
+    others = queens - [queen]
+    return true if others.any? { |q| q.attacks?(queen) }
+    others.each_with_index do |a, index|
+      rest = others[index+1..-1] || []
+      return true if rest.any? { |b| straight_line?(a, b, queen) }
+    end
+    false
+  end
+
+  # Returns whether three queens are in any straight line.
+  # +a+:: the first queen
+  # +b+:: the second queen
+  # +c+:: the third queen
+  def straight_line?(a, b, c)
+    dr_ab = a.pos.row - b.pos.row
+    dc_ab = a.pos.col - b.pos.col
+    dr_bc = b.pos.row - c.pos.row
+    dc_bc = b.pos.col - c.pos.col
+    dr_ab * dc_bc == dr_bc * dc_ab
+  end
+
+  # Returns a list of positions, representing the moves the queen can make in
+  # her row.
+  # +queen+:: the queen
+  def row_moves(queen)
+    cols = (0..@queens.count-1).to_a - [queen.pos.col]
+    cols.map { |col| Position.new(queen.pos.row, col) }
+  end
+
+  # Returns a string representation of the board, as a whitespace-delimited
+  # sequence of column of queens, sorted by row.
+  # +visual+:: when true, also includes a 2D board depiction
+  def to_s(visual = true)
+    s = @queens.map { |queen| queen.pos.col + 1 }.join(' ')
+    if visual
+      s += "\n" + @queens.map do |queen|
+        line = '.' * @queens.count
+        line[queen.pos.col] = 'Q'
+        line
+      end.join("\n")
+    end
+    s
+  end
+end
+
+
+# This class solves the Queens Revisited problem.
+class Solver
+
+  # Applies First-choice Random-restart Hill Climbing to solve the Queens
+  # Revisited problem. It has the limitation that if no solution exists, it
+  # will continue searching indefinitely.
+  # +n+:: the number of queens to place on an n x n board
+  def solve(n)
+    while true
+      @board = Board.new(n)
+      before = attacked = @board.attack_count
+      while attacked != nil and attacked > 0
+        before = attacked
+        attacked = first_choice(attacked)
+      end
+      return @board if attacked == 0
+    end
+  end
+
+  # Moves the first queen that results in a reduction of the attack count and
+  # returns the new attack count. Returns nil if no queen's movement reduces the
+  # attack count.
+  # +before+:: the current attack count
+  def first_choice(before)
+    @board.queens.each do |queen|
+      @board.row_moves(queen).each do |pos|
+        home = queen.pos
+        queen.move(pos)
+        attacked = @board.attack_count
+        return attacked if attacked < before
+        queen.move(home)
       end
     end
+    nil
   end
 end
 
 
 # Retrieves the sizes of the (square) board from the user and prints each
 # solution to the Queens Revisited problem for a board of that size.  Each
-# solution is printed as a list of queen columns, orderd by row, and as a
+# solution is printed as a list of queen columns, ordered by row, and as a
 # visual board layout.
-n = gets.to_i
-Solver.new(n, n).solve(0) do |board|
-  puts board.to_a.map { |c| c + 1 }.join(' ')
-  puts board
-  puts
-end
+n = (ARGV.shift || gets).to_i
+solution = Solver.new.solve(n, true)
+puts
+puts solution ? solution : "No solution for n=#{n}"
