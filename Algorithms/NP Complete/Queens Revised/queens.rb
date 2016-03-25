@@ -216,7 +216,8 @@ class Board
       memo + row.reduce('') do |memo, square|
         memo + case square
                when :queen then 'Q'
-               else '.'
+               when Possible then '.'
+               else '*'
                end
       end + "\n"
     end
@@ -236,8 +237,10 @@ class Solver
   # Creates an empty game board of a particular size.
   # +rows+:: the number of rows on the board
   # +cols+:: the number of columns on the board
-  def initialize(rows, cols)
+  # +debug+:: when true will print out each step
+  def initialize(rows, cols, debug = false)
     @board = Board.new(rows, cols)
+    @debug = debug
   end
 
   # Solves the Queens Revisited problem recursively by placing queens on
@@ -247,6 +250,12 @@ class Solver
   # +row+:: the row at which to begin placing queens
   # +block+:: a +Proc+ which is invoked with a solved board
   def solve(row, &block)
+    if @debug
+      puts "row #{row}:"
+      puts @board
+      puts
+    end
+
     if row == @board.rows
       yield @board
       return
@@ -270,6 +279,6 @@ end
 n = gets.to_i
 Solver.new(n, n).solve(0) do |board|
   puts board.to_a.map { |c| c + 1 }.join(' ')
-  puts board.to_s
+  puts board
   puts
 end
