@@ -27,6 +27,11 @@ class Position
     @row = row
     @col = col
   end
+
+  # Returns a string representation.
+  def to_s
+    "(#{row+1},#{col+1})"
+  end
 end
 
 
@@ -47,31 +52,52 @@ class Queen
     @pos = pos
   end
 
-  # Returns whether this queen attacks another queen in any way.
-  # +queen+:: the other queen
-  def attacks?(queen)
-    return true if attacks_vertically?(queen)
-    return true if attacks_horizontally?(queen)
-    return true if attacks_diagonally?(queen)
+  # Returns whether a queen attacks another queen.
+  # +queen+:: the queen
+  def attacks?(queens)
+    return true if queens.any? do |q|
+      vertically?(q) or horizontally?(q) or diagonally?(q)
+    end
+    queens.each_with_index do |q1, index|
+      rest = queens[index+1..-1] || []
+      return true if rest.any? { |q2| line?(self, q1, q2) }
+    end
     false
   end
 
   # Returns whether this queen attacks another queen vertically.
   # +queen+:: the other queen
-  def attacks_vertically?(queen)
+  def vertically?(queen)
     @pos.col == queen.pos.col
   end
 
   # Returns whether this queen attacks another queen horizontally.
   # +queen+:: the other queen
-  def attacks_horizontally?(queen)
+  def horizontally?(queen)
     @pos.row == queen.pos.row
   end
 
   # Returns whether this queen attacks another queen diagonally.
   # +queen+:: the other queen
-  def attacks_diagonally?(queen)
+  def diagonally?(queen)
     (@pos.row - queen.pos.row).abs == (@pos.col - queen.pos.col).abs
+  end
+
+  # Returns whether three queens are in any straight line.
+  # +a+:: the first queen
+  # +b+:: the second queen
+  # +c+:: the third queen
+  def line?(a, b, c)
+    dr_ab = a.pos.row - b.pos.row
+    dc_ab = a.pos.col - b.pos.col
+    dr_bc = b.pos.row - c.pos.row
+    dc_bc = b.pos.col - c.pos.col
+    dr_ab * dc_bc == dr_bc * dc_ab
+  end
+
+  # Returns a string representation.
+  def to_s
+    "queen@#{pos}"
   end
 end
 
@@ -87,33 +113,9 @@ class Board
     @queens = Array.new(n) { |row| Queen.new(Position.new(row, Random.rand(n))) }
   end
 
-  # Returns the number of queens under attack.
-  def attack_count
-    @queens.select { |q| attacked?(q) }.uniq.count
-  end
-
-  # Returns whether a queen is under attack from any other queen.
-  # +queen+:: the queen
-  def attacked?(queen)
-    others = queens - [queen]
-    return true if others.any? { |q| q.attacks?(queen) }
-    others.each_with_index do |a, index|
-      rest = others[index+1..-1] || []
-      return true if rest.any? { |b| straight_line?(a, b, queen) }
-    end
-    false
-  end
-
-  # Returns whether three queens are in any straight line.
-  # +a+:: the first queen
-  # +b+:: the second queen
-  # +c+:: the third queen
-  def straight_line?(a, b, c)
-    dr_ab = a.pos.row - b.pos.row
-    dc_ab = a.pos.col - b.pos.col
-    dr_bc = b.pos.row - c.pos.row
-    dc_bc = b.pos.col - c.pos.col
-    dr_ab * dc_bc == dr_bc * dc_ab
+  # Returns the queens that attack other queens.
+  def attacking_queens
+    @queens.select { |q| q.attacks?(@queens - [q]) }
   end
 
   # Returns a list of positions, representing the moves the queen can make in
@@ -126,17 +128,17 @@ class Board
 
   # Returns a string representation of the board, as a whitespace-delimited
   # sequence of column of queens, sorted by row.
-  # +visual+:: when true, also includes a 2D board depiction
-  def to_s(visual = true)
-    s = @queens.map { |queen| queen.pos.col + 1 }.join(' ')
-    if visual
-      s += "\n" + @queens.map do |queen|
-        line = '.' * @queens.count
-        line[queen.pos.col] = 'Q'
-        line
-      end.join("\n")
-    end
-    s
+  def to_a
+    @queens.map { |queen| queen.pos.col + 1 }
+  end
+
+  # Returns a string representation.
+  def to_s
+    @queens.map do |queen|
+      line = '.' * @queens.count
+      line[queen.pos.col] = 'Q'
+      line
+    end.join("\n")
   end
 end
 
@@ -144,38 +146,60 @@ end
 # This class solves the Queens Revisited problem.
 class Solver
 
-  # Applies First-choice Random-restart Hill Climbing to solve the Queens
-  # Revisited problem. It has the limitation that if no solution exists, it
-  # will continue searching indefinitely.
-  # +n+:: the number of queens to place on an n x n board
-  def solve(n)
-    while true
-      @board = Board.new(n)
-      before = attacked = @board.attack_count
-      while attacked != nil and attacked > 0
-        before = attacked
-        attacked = first_choice(attacked)
-      end
-      return @board if attacked == 0
-    end
+  # Constructor.
+  # +debug+:: when true, prints debug information while solving
+  def initialize(debug = false)
+    @debug = debug
   end
 
-  # Moves the first queen that results in a reduction of the attack count and
-  # returns the new attack count. Returns nil if no queen's movement reduces the
-  # attack count.
-  # +before+:: the current attack count
-  def first_choice(before)
-    @board.queens.each do |queen|
-      @board.row_moves(queen).each do |pos|
-        home = queen.pos
-        queen.move(pos)
-        attacked = @board.attack_count
-        return attacked if attacked < before
-        queen.move(home)
-      end
+  # Applies Min-Conflicts to solve the Queens Revisited problem, returning a
+  # solution or nil if there is no solution.
+  # +n+:: the number of queens to place on an n x n board
+  # +max_steps+:: the maximum number of steps to take
+  def solve(n, max_steps = 100)
+    @board = Board.new(n)
+    max_steps.times do |step|
+      puts "\nstep ##{step+1}:\n#{@board}" if @debug
+      attacking = @board.attacking_queens
+      puts 'attacking: ' + attacking.map { |q| q.to_s }.join(',') if @debug
+      return @board if attacking.count == 0
+      attacker = attacking[rand(attacking.count)]
+      puts "conflicted attacker: #{attacker}" if @debug
+      pos, _ = min_conflicts(attacker)
+      puts "moving attacker to: #{pos}" if @debug
+      attacker.move(pos)
     end
     nil
   end
+
+  def min_conflicts(queen)
+    moves = @board.row_moves(queen).map do |pos|
+      [pos, conflicts(queen, pos)]
+    end.sort do |a, b|
+      _, n1 = a
+      _, n2 = b
+      n1 <=> n2
+    end
+    puts 'moves: ' + moves.map { |p,n| "#{p}:#{n}" }.join(',') if @debug
+    winner = moves.shift
+    _, n = winner
+    winners = [winner] + moves.take_while { |_, m| n == m }
+    puts 'winners: ' + winners.map { |p,n| "#{p}:#{n}" }.join(',') if @debug
+    winners[rand(winners.count)]
+  end
+
+  # Returns the number of queens that will be under attack after moving one
+  # queen to a new position.
+  # +queen+:: the queen to move
+  # +pos+:: the position to move her to
+  def conflicts(queen, pos)
+    home = queen.pos
+    queen.move(pos)
+    n = @board.attacking_queens.count
+    queen.move(home)
+    n
+  end
+
 end
 
 
@@ -183,9 +207,11 @@ end
 # solution to the Queens Revisited problem for a board of that size.  Each
 # solution is printed as a list of queen columns, ordered by row, and as a
 # visual board layout.
+srand
 n = (ARGV.shift || gets).to_i
-solution = Solver.new.solve(n)
+solution = Solver.new.solve(n, 1_000_000_000)
 if solution
+  puts solution.to_a.join(' ')
   puts solution
 else
   puts "No solution for n=#{n}"
